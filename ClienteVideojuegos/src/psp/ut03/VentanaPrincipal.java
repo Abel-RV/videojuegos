@@ -5,7 +5,15 @@
 package psp.ut03;
 
 import java.awt.Image;
+import java.awt.event.ActionEvent;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.IOException;
+import java.net.Socket;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.ImageIcon;
 import javax.swing.table.DefaultTableModel;
 
@@ -15,6 +23,10 @@ import javax.swing.table.DefaultTableModel;
  */
 public class VentanaPrincipal extends javax.swing.JFrame {
     private DefaultTableModel modeloVideojuegos;
+    private Socket socket;
+    private DataInputStream dis;
+    private DataOutputStream dos;
+    private List<Videojuego> videojuegos= new ArrayList<Videojuego>();
     
     
     /**
@@ -23,9 +35,85 @@ public class VentanaPrincipal extends javax.swing.JFrame {
     public VentanaPrincipal() {
         initComponents();
         modeloVideojuegos = (DefaultTableModel) tablaVideojuegos.getModel();
-        
+
+        tablaVideojuegos.getSelectionModel().addListSelectionListener(e->{
+            if(!e.getValueIsAdjusting() && tablaVideojuegos.getSelectedRow()!=-1){
+                try{
+                    int fila = tablaVideojuegos.getSelectedRow();
+                    Videojuego videojuego = videojuegos.get(fila);
+                    dos.writeUTF("PORTADA");
+                    dos.writeInt(videojuego.getId());
+
+                    boolean existe = dis.readBoolean();
+                    if(existe){
+                        long tamanio = dis.readLong();
+                        byte[] buffer = new  byte[(int)tamanio];
+
+                        dis.readFully(buffer);
+
+                        ImageIcon icon = new ImageIcon(buffer);
+                        Image image = icon.getImage();
+                        lPortada.setIcon(new  ImageIcon(image));
+                        lPortada.setText("");
+                    }else{
+                        lPortada.setIcon(null);
+                        lPortada.setText("Portada no disponible");
+                    }
+                    bConectar.addActionListener(evt->bConectarActionPerformed(evt));
+                    bDesconectar.addActionListener(evt->bDesconectarActionPerformed(evt));
+                    bFiltrar.addActionListener(evt->bFiltrarActionPerformed(evt));
+                } catch (IOException ex) {
+                    throw new RuntimeException(ex);
+                }
+            }
+        });
+
+        bConectar.addActionListener(evt -> bConectarActionPerformed(evt));
+        bDesconectar.addActionListener(evt -> bDesconectarActionPerformed(evt));
+        bFiltrar.addActionListener(evt -> bFiltrarActionPerformed(evt));
+    }
+    private void habilitar(boolean conectado) {
+        // Panel Servidor: Se bloquean los datos de conexión si ya estamos conectados
+        tIP.setEnabled(!conectado);
+        tPuerto.setEnabled(!conectado);
+        bConectar.setEnabled(!conectado);
+        bDesconectar.setEnabled(conectado);
+        bFiltrar.setEnabled(conectado);
+        tTitulo.setEnabled(conectado);
+        cGenero.setEnabled(conectado);
+        cDesarrolladora.setEnabled(conectado);
+        tablaVideojuegos.setEnabled(conectado);
+        // El botón desconectar solo está activo si estamos conectados
+        bDesconectar.setEnabled(conectado);
+
+        // Panel Filtro: Solo activos si hay conexión
+        tTitulo.setEnabled(conectado);
+        cGenero.setEnabled(conectado);
+        cDesarrolladora.setEnabled(conectado);
+        bFiltrar.setEnabled(conectado);
+
+        // Tabla de resultados: Solo activa si hay conexión
+        tablaVideojuegos.setEnabled(conectado);
     }
 
+    private void bDesconectarActionPerformed(ActionEvent evt) {
+        try{
+            if(dos!=null){
+                dos.writeUTF("END");
+            }
+            if(socket!=null){
+                socket.close();
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }finally {
+            habilitar(false);
+            modeloVideojuegos.setRowCount(0);
+            cGenero.removeAllItems();
+            cDesarrolladora.removeAllItems();
+            lPortada.setIcon(null);
+        }
+    }
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -248,6 +336,74 @@ public class VentanaPrincipal extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
+    private void bConectarActionPerformed(ActionEvent evt) {
+        try{
+            String ip=tIP.getText();
+            int puerto = Integer.parseInt(tPuerto.getText());
+
+            socket= new Socket(ip,puerto);
+            dis = new DataInputStream(socket.getInputStream());
+            dos = new DataOutputStream(socket.getOutputStream());
+
+            dos.writeUTF("GET-GEN");
+            cGenero.removeAllItems();
+            cGenero.addItem("---Seleccione una opción---");
+            int numGen = dis.readInt();
+
+            for(int i=0;i<numGen;i++){
+                cGenero.addItem(dis.readUTF());
+            }
+            habilitar(true);
+
+            dos.writeUTF("GET-GENS");
+            cDesarrolladora.removeAllItems();
+            cDesarrolladora.addItem("---Seleccione una opcion---");
+            int numDesarrolladora = dis.readInt();
+            for(int i=0;i<numDesarrolladora;i++){
+                cDesarrolladora.addItem(dis.readUTF());
+            }
+            habilitar(true);
+
+
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void bFiltrarActionPerformed(ActionEvent evt) {
+        try{
+            dos.writeUTF("FILTER");
+
+            String titulo = tTitulo.getText().isEmpty()?"NULL":tTitulo.getText();
+            String genero = cGenero.getSelectedIndex()==0?"NULL":(String) cGenero.getSelectedItem();
+            String desarrolladora = cDesarrolladora.getSelectedIndex()==0?"NULL":(String) cDesarrolladora.getSelectedItem();
+
+            dos.writeUTF(titulo);
+            dos.writeUTF(genero);
+            dos.writeUTF(desarrolladora);
+            int cantidad = dis.readInt();
+            modeloVideojuegos.setRowCount(0);
+            videojuegos.clear();
+
+            for(int i =0;i<cantidad;i++){
+                int id = dis.readInt();
+                String tit= dis.readUTF();
+                String gen = dis.readUTF();
+                String des = dis.readUTF();
+                int edad = dis.readInt();
+
+                Videojuego v = new Videojuego(id,tit,gen,des,edad,"");
+                videojuegos.add(v);
+
+                modeloVideojuegos.addRow(new Object[]{tit,gen,des,edad});
+
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
 
     private void cargarImagen(File imagen){        

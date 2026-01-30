@@ -23,7 +23,8 @@ public class HiloServidor extends Thread {
         try{
             while(!serverSocket.isClosed()){
                 Socket socket = serverSocket.accept();
-                Hi
+                HiloCliente hilo = new HiloCliente(socket,modeloVideojuegos);
+                pool.execute(hilo);
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

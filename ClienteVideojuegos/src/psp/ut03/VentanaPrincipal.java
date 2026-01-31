@@ -53,7 +53,11 @@ public class VentanaPrincipal extends javax.swing.JFrame {
 
                         ImageIcon icon = new ImageIcon(buffer);
                         Image image = icon.getImage();
-                        lPortada.setIcon(new  ImageIcon(image));
+
+                        int ancho = lPortada.getWidth();
+
+                        Image img = image.getScaledInstance(ancho, 400, Image.SCALE_SMOOTH);
+                        lPortada.setIcon(new  ImageIcon(img));
                         lPortada.setText("");
                     }else{
                         lPortada.setIcon(null);

@@ -4,6 +4,10 @@
  */
 package psp.ut03;
 
+import psp.ut03.threads.HiloServidor;
+
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -21,7 +25,6 @@ public class VentanaPrincipal extends javax.swing.JFrame {
     private ServerSocket serverSocket;
     private ExecutorService pool;
     private ModeloVideojuegos modeloVideojuegos;
-    private List<Socket> sockets= new ArrayList<Socket>();
 
     private void habilitar(boolean encendido){
         bIniciar.setEnabled(!encendido);
@@ -36,6 +39,17 @@ public class VentanaPrincipal extends javax.swing.JFrame {
     public VentanaPrincipal() {
         initComponents();
         modeloVideojuegos = new ModeloVideojuegos();
+        bIniciar.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                bIniciarActionPerformed(e);
+            }
+        });
+
+        bParar.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                bPararActionPerformed(e);
+            }
+        });
     }
     
 
@@ -175,8 +189,25 @@ public class VentanaPrincipal extends javax.swing.JFrame {
             serverSocket= new ServerSocket(puerto);
             pool = Executors.newFixedThreadPool(numClientes);
 
-            new Hilo
+           HiloServidor servidor= new HiloServidor(serverSocket,pool,modeloVideojuegos);
+            servidor.start();
+            habilitar(true);
 
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private void bPararActionPerformed(java.awt.event.ActionEvent evt) {
+        try{
+            if(serverSocket!=null&& !serverSocket.isClosed()){
+                serverSocket.close();
+            }
+
+            if(pool!=null && !pool.isShutdown()){
+                pool.shutdownNow();
+            }
+            habilitar(false);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
